@@ -4,9 +4,8 @@ Imports System.Windows.Forms
 Imports System.ComponentModel
 Imports System.IO
 Imports System.Drawing
-'Imports System.Runtime.Serialization.Formatters.Binary
 
-Public Class LabelProject
+Public Class EtiketProject
     Shared ItemCount As Integer = 0
     Const mm As Single = 3.937
 
@@ -20,7 +19,6 @@ Public Class LabelProject
         Private PrintAllPage As Boolean = False
         Private PrintPageNum As Integer = 0
         Private PrintLabelNum As Integer = 0
-        Private mSelectedItm As LabelItem
 
 
 #Region "Properties"
@@ -39,13 +37,6 @@ Public Class LabelProject
         Public Property EtiketSutunSayısı As Integer = 1
 
         Public Property SelectedItem As LabelItem
-            Set(value As LabelItem)
-                mSelectedItm = value
-            End Set
-            Get
-                Return mSelectedItm
-            End Get
-        End Property
 
         Public Property PrintDoc As PrintDocument
             Get
@@ -83,6 +74,7 @@ Public Class LabelProject
         Public Property ParameterTable As New ParameterTableClass
 
         Public Event ErrorEvent(Hata As String)
+        Public Property DrawMargins As Boolean = False
 #End Region
 
         Public Sub New()
@@ -100,7 +92,129 @@ Public Class LabelProject
                 RaiseEvent ErrorEvent(ex.Message)
             End Try
         End Sub
+        Public Sub AddText(Txt As String,
+                           x As Single, y As Single,
+                           W As Single, H As Single,
+                           Optional FSize As Integer = 10,
+                           Optional FBold As Boolean = True,
+                           Optional FItalik As Boolean = False,
+                           Optional Box As Boolean = False,
+                           Optional Hiza As ContentAlignment = ContentAlignment.MiddleLeft)
 
+            Using NewItm As New LabelItem(LabelItem.ItemType.Text)
+
+                With NewItm
+                    .Text = Txt
+                    .x1 = x
+                    .y1 = y
+                    .Width = W
+                    .Height = H
+
+                    Dim FStyle As FontStyle = 0
+                    If FBold Then FStyle = FStyle Or FontStyle.Bold
+                    If FItalik Then FStyle = FStyle Or FontStyle.Italic
+
+                    .MyFont = New Font(FontFamily.GenericSansSerif, FSize, FStyle)
+                    .TextAlign = Hiza
+                End With
+
+                Try
+                    List.Add(NewItm.ItemNumber, NewItm)
+                Catch ex As Exception
+                    RaiseEvent ErrorEvent(ex.Message)
+                End Try
+
+            End Using
+
+            If Box Then AddBox(x, y, W, H, Color.Black, 1)
+
+        End Sub
+
+        Public Sub AddBox(x As Single, y As Single,
+                           W As Single, H As Single,
+                           Renk As Color,
+                           Optional LineW As Single = 1)
+
+            Using NewItm As New LabelItem(LabelItem.ItemType.Box)
+                With NewItm
+                    .LineWidth = LineW
+                    .LineColor = Renk 'Color.Black
+                    .x1 = x
+                    .y1 = y
+                    .Width = W
+                    .Height = H
+                End With
+                Try
+                    List.Add(NewItm.ItemNumber, NewItm)
+                Catch ex As Exception
+                    RaiseEvent ErrorEvent(ex.Message)
+                End Try
+            End Using
+        End Sub
+        Public Sub AddLine(x As Single, y As Single,
+                           W As Single, H As Single,
+                           Renk As Color,
+                           Optional LineW As Single = 1)
+
+            Using NewItm As New LabelItem(LabelItem.ItemType.Line)
+                With NewItm
+                    .LineWidth = LineW
+                    .LineColor = Renk 'Color.Black
+                    .x1 = x
+                    .y1 = y
+                    .Width = W
+                    .Height = H
+                End With
+                Try
+                    List.Add(NewItm.ItemNumber, NewItm)
+                Catch ex As Exception
+                    RaiseEvent ErrorEvent(ex.Message)
+                End Try
+            End Using
+        End Sub
+        Public Sub AddImage(Img As Image,
+                           x As Single, y As Single,
+                           W As Single, H As Single, Optional Box As Boolean = False)
+
+            Using NewItm As New LabelItem(LabelItem.ItemType.Image)
+                With NewItm
+                    .Image = Img
+                    .x1 = x
+                    .y1 = y
+                    .Width = W
+                    .Height = H
+                End With
+                Try
+                    List.Add(NewItm.ItemNumber, NewItm)
+                Catch ex As Exception
+                    RaiseEvent ErrorEvent(ex.Message)
+                End Try
+            End Using
+
+            If Box Then AddBox(x, y, W, H, Color.Black, 1)
+        End Sub
+        Public Sub AddBarcode(Txt As String,
+                              x As Single, y As Single,
+                              W As Single, H As Single,
+                              Barcodetype As LabelItem.BarcodeTypes,
+                              Optional PrfxChar As String = vbNullString)
+
+            Using NewItm As New LabelItem(LabelItem.ItemType.Barcode)
+                With NewItm
+                    .Text = Txt
+                    .BarcodePrefixChar = PrfxChar
+                    .x1 = x
+                    .y1 = y
+                    .BarcodeType = Barcodetype
+                    .Height = H
+                End With
+                Try
+                    List.Add(NewItm.ItemNumber, NewItm)
+                Catch ex As Exception
+                    RaiseEvent ErrorEvent(ex.Message)
+                End Try
+            End Using
+        End Sub
         Public Sub Remove(ByVal Key As String)
             For Each Itm As LabelItem In List.Values
                 If Itm.Name = Key Then
@@ -193,7 +307,7 @@ Public Class LabelProject
             'Margins 
             Dim MarginPen As New Pen(Brushes.Blue) With {.DashStyle = Drawing2D.DashStyle.Dash}
             With e.Graphics
-                .DrawRectangle(MarginPen, e.MarginBounds)
+                If DrawMargins Then .DrawRectangle(MarginPen, e.MarginBounds)
             End With
 
             If CokluEtiket Then
@@ -221,39 +335,44 @@ Public Class LabelProject
                     For Stn = 1 To EtiketSutunSayısı
                         PrintLabelNum += 1
 
-                        Row = MyDataTable.Rows(PrintLabelNum - 1)
+                        If Not MyDataTable Is Nothing Then
+                            Row = MyDataTable.Rows(PrintLabelNum - 1)
 
-                        For Each Itm As LabelProject.LabelItem In Me
+                            For Each Itm As EtiketProject.LabelItem In Me
 
-                            If Itm.Type = LabelProject.LabelItem.ItemType.Text Or
-                                Itm.Type = LabelProject.LabelItem.ItemType.Barcode Then
+                                If Itm.Type = EtiketProject.LabelItem.ItemType.Text Or
+                                    Itm.Type = EtiketProject.LabelItem.ItemType.Barcode Then
 
-                                If Itm.DataField.Length > 0 Then
-                                    If IsDBNull(Row(Itm.DataField)) Then
-                                        Itm.Text = ""
-                                    Else
-                                        Itm.Text = Row(Itm.DataField)
+                                    If Itm.DataField.Length > 0 Then
+                                        If IsDBNull(Row(Itm.DataField)) Then
+                                            Itm.Text = ""
+                                        Else
+                                            Itm.Text = Row(Itm.DataField)
+                                        End If
                                     End If
-                                End If
 
-                            End If
-                        Next
+                                End If
+                            Next
+                        End If
 
                         SetBirlesikAlanlar()
                         SetBarkodText()
 
-                        For Each Itm As LabelProject.LabelItem In Me
+                        For Each Itm As EtiketProject.LabelItem In Me
                             Itm.Yazdır(e.Graphics, (Stn - 1) * SutunArası + e.MarginBounds.Left, (Str - 1) * SatırArası + e.MarginBounds.Top)
                         Next
 
-                        If PrintLabelNum >= MyDataTable.Rows.Count Then
+                        If Not MyDataTable Is Nothing AndAlso
+                            PrintLabelNum >= MyDataTable.Rows.Count Then
+
                             e.HasMorePages = False
                             Exit Sub
                         End If
                     Next
                 Next
 
-                If PrintLabelNum < MyDataTable.Rows.Count Then
+                If Not MyDataTable Is Nothing AndAlso
+                    PrintLabelNum < MyDataTable.Rows.Count Then
                     e.HasMorePages = True
                 Else
                     e.HasMorePages = False
@@ -264,9 +383,9 @@ Public Class LabelProject
                 SetBirlesikAlanlar()
                 SetBarkodText()
 
-                For Each Itm As LabelProject.LabelItem In Me
+                For Each Itm As EtiketProject.LabelItem In Me
                     Itm.Yazdır(e.Graphics, e.MarginBounds.Left, e.MarginBounds.Top)
-                    If (Not mSelectedItm Is Nothing) AndAlso Itm.Name = mSelectedItm.Name Then
+                    If (Not SelectedItem Is Nothing) AndAlso Itm.Name = SelectedItem.Name Then
                         e.Graphics.DrawRectangle(New Pen(Color.Red, 1), Itm.x1 * mm - 1 + e.MarginBounds.Left, Itm.y1 * mm - 1 + e.MarginBounds.Top, Itm.Width * mm + 2, Itm.Height * mm + 2)
                     End If
                 Next
@@ -757,7 +876,7 @@ Public Class LabelProject
     End Class
 
     Public Class LabelItem
-
+        Implements IDisposable
         Public Enum ItemType As Byte
             Label
             Text
@@ -770,6 +889,10 @@ Public Class LabelProject
         Public Enum BarcodeTypes As Byte
             Code39
             Code128
+            QR
+            Data_Matrix
+            Aztec
+            EAN_13
         End Enum
 
 #Region " Properties"
@@ -820,7 +943,7 @@ Public Class LabelProject
         Public Property LineWidth As Single = 1
 
         <CategoryAttribute("Barkod"), Description("Barkod Tipi")>
-        Public Property BarcodeType As BarcodeTypes
+        Public Property BarcodeType As BarcodeTypes = BarcodeTypes.Code128  'ZXing.BarcodeFormat = ZXing.BarcodeFormat.CODE_128  
 
         <TypeConverter(GetType(VeriFieldList)),
         CategoryAttribute("Barkod"),
@@ -831,6 +954,7 @@ Public Class LabelProject
         Public Property Image As Image
 
         Public Grf As Drawing.Graphics
+        Private disposedValue As Boolean
 #End Region
 
         Public Sub New(Optional ItemType As ItemType = ItemType.Label)
@@ -919,38 +1043,31 @@ Public Class LabelProject
 
         Private Sub DrawBarcode(X0 As Single, Y0 As Single)
             Dim Img As Image = Nothing
+            Dim BCode As New ZXing.BarcodeWriter
 
             Select Case BarcodeType
                 Case BarcodeTypes.Code128
-                    Dim BCode As New iTextSharp.text.pdf.Barcode128
-                    Try
-                        With BCode
-                            .Extended = True
-                            .Code = BarcodePrefixChar & Text
-                            .BarHeight = Height * mm
-                            .N = 4
-                        End With
-                        Img = BCode.CreateDrawingImage(Color.Black, Color.White)
-                    Catch ex As Exception
-                        Img = Nothing
-                    End Try
-
+                    BCode.Format = ZXing.BarcodeFormat.CODE_128
                 Case BarcodeTypes.Code39
-
-                    Dim BCode As New iTextSharp.text.pdf.Barcode39
-                    Try
-                        With BCode
-                            .Extended = True
-                            .Code = BarcodePrefixChar & Text
-                            .BarHeight = Height * mm
-                            .N = 4
-                        End With
-                        Img = BCode.CreateDrawingImage(Color.Black, Color.White)
-                    Catch ex As Exception
-                        Img = Nothing
-                    End Try
-
+                    BCode.Format = ZXing.BarcodeFormat.CODE_39
+                Case BarcodeTypes.QR
+                    BCode.Format = ZXing.BarcodeFormat.QR_CODE
+                    BCode.Options.Width = Width * mm
+                Case BarcodeTypes.Data_Matrix
+                    BCode.Format = ZXing.BarcodeFormat.DATA_MATRIX
+                Case BarcodeTypes.Aztec
+                    BCode.Format = ZXing.BarcodeFormat.AZTEC
+                Case BarcodeTypes.EAN_13
+                    BCode.Format = ZXing.BarcodeFormat.EAN_13
             End Select
+
+            BCode.Options.Height = Height * mm
+            If (BCode.Format = ZXing.BarcodeFormat.EAN_13 And (BarcodePrefixChar & Text).Length = 12) Or BCode.Format <> ZXing.BarcodeFormat.EAN_13 Then
+                Img = BCode.Write(BarcodePrefixChar & Text)
+            Else
+                Img = Nothing
+            End If
+            ' Img = BCode.Write(BarcodePrefixChar & Text)
 
             Try
                 If Not IsNothing(Img) Then Grf.DrawImage(Img, x1 * mm + X0, y1 * mm + Y0)
@@ -981,7 +1098,29 @@ Public Class LabelProject
             If Not IsNothing(Img) Then Grf.DrawImage(Img, x1 * mm + X0, y1 * mm + Y0, Width * mm, Height * mm)
         End Sub
 #End Region
+        Protected Overridable Sub Dispose(disposing As Boolean)
+            If Not disposedValue Then
+                If disposing Then
+                    ' TODO: yönetilen durumu (yönetilen nesneleri) atın
+                End If
 
+                ' TODO: yönetilmeyen kaynakları (yönetilmeyen nesneleri) serbest bırakın ve sonlandırıcıyı geçersiz kılın
+                ' TODO: büyük alanları null olarak ayarlayın
+                disposedValue = True
+            End If
+        End Sub
+
+        ' ' TODO: sonlandırıcıyı yalnızca 'Dispose(disposing As Boolean)' içinde yönetilmeyen kaynakları serbest bırakacak kod varsa geçersiz kılın
+        ' Protected Overrides Sub Finalize()
+        '     ' Bu kodu değiştirmeyin. Temizleme kodunu 'Dispose(disposing As Boolean)' metodunun içine yerleştirin.
+        '     Dispose(disposing:=False)
+        '     MyBase.Finalize()
+        ' End Sub
+        Public Sub Dispose() Implements IDisposable.Dispose
+            ' Bu kodu değiştirmeyin. Temizleme kodunu 'Dispose(disposing As Boolean)' metodunun içine yerleştirin.
+            Dispose(disposing:=True)
+            GC.SuppressFinalize(Me)
+        End Sub
     End Class
 
     Public Class DataFieldList
